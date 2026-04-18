@@ -4239,6 +4239,10 @@ void IGFD::FileDialog::m_DrawFileListView(ImVec2 vSize) {
 #endif  // USE_CUSTOM_SORTING_ICON
         ;
     auto listViewID = ImGui::GetID("##FileDialog_fileTable");
+
+    ImGuiContext &g = *GImGui;
+    g.NextWindowData.HasFlags |= ImGuiNextWindowDataFlags_HasChildFlags;
+    g.NextWindowData.ChildFlags |= ImGuiChildFlags_NavFlattened;
     if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 2, flags, vSize, 0.0f)) //-V112
     {
         ImGui::TableSetupScrollFreeze(0, 1);  // Make header always visible
