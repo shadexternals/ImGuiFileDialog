@@ -189,7 +189,7 @@ SOFTWARE.
 #define invertOkAndCancelButtons 0
 #endif  // invertOkAndCancelButtons
 #ifndef resetButtonString
-#define resetButtonString "R"
+#define resetButtonString "Reset"
 #endif  // resetButtonString
 #ifndef drivesButtonString
 #define drivesButtonString "Drives"
@@ -213,7 +213,7 @@ SOFTWARE.
 #define fileNameString "File Name :"
 #endif  // fileNameString
 #ifndef dirNameString
-#define dirNameString "Directory Path :"
+#define dirNameString "Folder Path :"
 #endif  // dirNameString
 #ifndef buttonResetSearchString
 #define buttonResetSearchString "Reset search"
@@ -378,6 +378,8 @@ inline bool inToggleButton(const char* vLabel, bool* vToggled) {
 #pragma region INTERNAL
 
 #pragma region EXCEPTION
+
+char displayBuffer[1028];
 
 class IGFDException : public std::exception {
 private:
@@ -937,6 +939,7 @@ void IGFD::SearchManager::Clear() {
 
 void IGFD::SearchManager::DrawSearchBar(FileDialogInternal& vFileDialogInternal) {
     // search field
+    /*
     if (IMGUI_BUTTON(resetButtonString "##BtnImGuiFileDialogSearchField")) {
         Clear();
         vFileDialogInternal.fileManager.ApplyFilteringOnFileList(vFileDialogInternal);
@@ -955,6 +958,7 @@ void IGFD::SearchManager::DrawSearchBar(FileDialogInternal& vFileDialogInternal)
         searchTag = searchBuffer;
         vFileDialogInternal.fileManager.ApplyFilteringOnFileList(vFileDialogInternal);
     }
+    */
 }
 
 #pragma endregion
@@ -1634,7 +1638,7 @@ bool IGFD::FileInfos::FinalizeFileTypeParsing(const size_t& vMaxDotToExtract) {
 #pragma region FileManager
 
 IGFD::FileManager::FileManager() {
-    fsRoot = std::string(1u, PATH_SEP);
+    fsRoot = std::filesystem::current_path().root_path().string();
     m_FileSystemName = typeid(FILE_SYSTEM_OVERRIDE).name();
     // std::make_unique is not available un cpp11
     m_FileSystemPtr = std::unique_ptr<FILE_SYSTEM_OVERRIDE>(new FILE_SYSTEM_OVERRIDE());
@@ -2199,6 +2203,16 @@ void IGFD::FileManager::m_m_AddFileNameInSelection(const std::string& vFileName,
 
     if (vSetLastSelectionFileName)
         m_LastSelectedFileName = vFileName;
+
+#ifdef WIN32
+    std::string path = GetCurrentPath() + "\\" + vFileName;
+#else
+    std::string path = GetCurrentPath() + "/" + vFileName;
+#endif
+
+    if (vFileName != ".." && !path.starts_with(".")) {
+        IGFD::Utils::SetBuffer(displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, path);
+    }
 }
 
 void IGFD::FileManager::SetCurrentDir(const std::string& vPath) {
@@ -2277,6 +2291,9 @@ std::string IGFD::FileManager::ComposeNewPath(std::vector<std::string>::iterator
 #ifdef _IGFD_UNIX_  // _IGFD_UNIX_ is _IGFD_WIN_ or APPLE
             if (res[0] != PATH_SEP)
                 res = PATH_SEP + res;
+#else
+            if (res.back() != PATH_SEP)
+                res.push_back(PATH_SEP);
 #endif  // defined(_IGFD_UNIX_)
             break;
         }
@@ -2311,6 +2328,10 @@ void IGFD::FileManager::SetCurrentPath(const std::string& vCurrentPath) {
 void IGFD::FileManager::SetDefaultFileName(const std::string& vFileName) {
     dLGDefaultFileName = vFileName;
     IGFD::Utils::SetBuffer(fileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, vFileName);
+
+    if (!GetCurrentPath().starts_with(".")) {
+        IGFD::Utils::SetBuffer(displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, GetCurrentPath());
+    }
 }
 
 bool IGFD::FileManager::SelectDirectory(const std::shared_ptr<FileInfos>& vInfos) {
@@ -2336,12 +2357,11 @@ bool IGFD::FileManager::SelectDirectory(const std::shared_ptr<FileInfos>& vInfos
         }
 
         if (m_FileSystemPtr->IsDirectoryCanBeOpened(newPath)) {
+            m_CurrentPath = newPath; //-V820
             if (showDrives) {
-                m_CurrentPath = vInfos->fileNameExt;
                 fsRoot = m_CurrentPath;
-            } else {
-                m_CurrentPath = newPath;  //-V820
             }
+
             pathClick = true;
         }
     }
@@ -2479,6 +2499,7 @@ void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogIn
     if (IMGUI_BUTTON(resetButtonString)) {
         SetCurrentPath(".");
         OpenCurrentPath(vFileDialogInternal);
+        IGFD::Utils::SetBuffer(displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, GetCurrentPath());
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(buttonResetPathString);
@@ -2495,6 +2516,7 @@ void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogIn
 
     ImGui::SameLine();
 
+    /*
     if (IMGUI_BUTTON(editPathButtonString)) {
         inputPathActivated = !inputPathActivated;
         if (inputPathActivated) {
@@ -2507,6 +2529,7 @@ void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogIn
         ImGui::SetTooltip(buttonEditPathString);
 
     ImGui::SameLine();
+    */
 
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 
@@ -2548,7 +2571,7 @@ void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogIn
                             if (click) {
                                 m_OpenPathPopup(vFileDialogInternal, itPathDecomp - 1);
                             } else if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
-                                m_SetCurrentPath(itPathDecomp - 1);
+                                //  m_SetCurrentPath(itPathDecomp - 1);
                                 break;
                             }
                         }
@@ -2563,7 +2586,7 @@ void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogIn
                     puPathClicked = true;
                     break;
                 } else if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {  // activate input for path
-                    m_SetCurrentPath(itPathDecomp);
+                    // m_SetCurrentPath(itPathDecomp);
                     break;
                 }
             }
@@ -3583,6 +3606,8 @@ void IGFD::FileDialog::OpenDialog(const std::string& vKey,
         m_FileDialogInternal.filterManager.dLGdefaultExt.clear();
     }
 
+    IGFD::Utils::SetBuffer(displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, GetCurrentPath());
+
     m_FileDialogInternal.filterManager.ParseFilters(vFilters);
     m_FileDialogInternal.filterManager.SetSelectedFilterWithExt(m_FileDialogInternal.filterManager.dLGdefaultExt);
 
@@ -3876,7 +3901,7 @@ void IGFD::FileDialog::m_DrawHeader() {
 }
 
 void IGFD::FileDialog::m_DrawContent() {
-    ImVec2 size = ImGui::GetContentRegionAvail() - ImVec2(0.0f, m_FileDialogInternal.footerHeight);
+    ImVec2 size = ImVec2(0.0f, ImGui::GetContentRegionAvail().y - m_FileDialogInternal.footerHeight);
 
 #ifdef USE_BOOKMARK
     if (!(m_FileDialogInternal.dLGflags & ImGuiFileDialogFlags_DisableBookmarkMode)) {
@@ -3931,8 +3956,9 @@ void IGFD::FileDialog::m_DisplayPathPopup(ImVec2 vSize) {
 
         ImGui::PushID(this);
 
-        static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
-                                       ImGuiTableFlags_NoHostExtendY;
+        static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg
+                                       | ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY
+                                       | ImGuiTableFlags_NoHostExtendY;
         auto listViewID = ImGui::GetID("##FileDialog_pathTable");
         if (ImGui::BeginTableEx("##FileDialog_pathTable", listViewID, 1, flags, size, 0.0f))  //-V112
         {
@@ -3967,8 +3993,12 @@ void IGFD::FileDialog::m_DisplayPathPopup(ImVec2 vSize) {
 
                         if (ImGui::TableNextColumn())  // file name
                         {
-                            if (ImGui::Selectable(infos->fileNameExt.c_str(), &selected,
-                                    ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_SpanAvailWidth)) {
+                            if (ImGui::Selectable(infos->fileNameExt.c_str(),
+                                                  &selected,
+                                                  static_cast<int>(
+                                                      ImGuiSelectableFlags_SpanAllColumns)
+                                                      | static_cast<int>(
+                                                          ImGuiSelectableFlags_SpanAvailWidth))) {
                                 fdi.SetCurrentPath(fdi.ComposeNewPath(fdi.GetCurrentPopupComposedPath()));
                                 fdi.puPathClicked = fdi.SelectDirectory(infos);
                                 ImGui::CloseCurrentPopup();
@@ -3992,7 +4022,10 @@ void IGFD::FileDialog::m_DisplayPathPopup(ImVec2 vSize) {
 
 bool IGFD::FileDialog::m_DrawOkButton() {
     auto& fdFile = m_FileDialogInternal.fileManager;
-    if (m_FileDialogInternal.canWeContinue && strlen(fdFile.fileNameBuffer)) {
+    std::string filename(fdFile.fileNameBuffer);
+
+    if (m_FileDialogInternal.canWeContinue && strlen(fdFile.fileNameBuffer) && filename != ".."
+        && !filename.starts_with("$") && !GetCurrentPath().starts_with(".")) {
         if (IMGUI_BUTTON(okButtonString "##validationdialog", ImVec2(okButtonWidth, 0.0f)) || m_FileDialogInternal.isOk) {
             m_FileDialogInternal.isOk = true;
             return true;
@@ -4007,9 +4040,12 @@ bool IGFD::FileDialog::m_DrawOkButton() {
 }
 
 bool IGFD::FileDialog::m_DrawCancelButton() {
-    if (IMGUI_BUTTON(cancelButtonString "##validationdialog", ImVec2(cancelButtonWidth, 0.0f)) ||
-        m_FileDialogInternal.needToExitDialog)  // dialog exit asked
+    if (IMGUI_BUTTON(cancelButtonString "##validationdialog", ImVec2(cancelButtonWidth, 0.0f))
+        || m_FileDialogInternal.needToExitDialog) // dialog exit asked
     {
+        auto &fdFile = m_FileDialogInternal.fileManager;
+        fdFile.SetCurrentPath(".");
+        fdFile.OpenCurrentPath(m_FileDialogInternal);
         m_FileDialogInternal.isOk = false;
         return true;
     }
@@ -4066,9 +4102,18 @@ bool IGFD::FileDialog::m_DrawFooter() {
     if (m_FileDialogInternal.dLGflags & ImGuiFileDialogFlags_ReadOnlyFileNameField) {
         flags |= ImGuiInputTextFlags_ReadOnly;
     }
-    if (ImGui::InputText("##FileName", fdFile.fileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, flags)) {
+
+
+    if (ImGui::IsWindowAppearing()) {
+        IGFD::Utils::SetBuffer(displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, GetCurrentPath());
+    }
+
+    ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+    if (ImGui::InputText("##FileName", displayBuffer, MAX_FILE_DIALOG_NAME_BUFFER, flags)) {
         m_FileDialogInternal.isOk = true;
     }
+    ImGui::PopItemFlag();
+
     if (ImGui::GetItemID() == ImGui::GetActiveID())
         m_FileDialogInternal.fileInputIsActive = true;
     ImGui::PopItemWidth();
@@ -4116,10 +4161,11 @@ void IGFD::FileDialog::m_SelectableItem(int vidx, std::shared_ptr<FileInfos> vIn
             // nav system, selectable cause open directory or select directory
             if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) {
                 // little fix for get back the mouse behavior in nav system
-                if (ImGui::IsMouseDoubleClicked(0))  // 0 -> left mouse button double click
+                if (ImGui::IsMouseDoubleClicked(0) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown)
+                    || ImGui::IsKeyPressed(ImGuiKey_Enter)) // 0 -> left mouse button double click
                 {
                     fdi.puPathClicked = fdi.SelectDirectory(vInfos);
-                } else if (fdi.dLGDirectoryMode)  // directory chooser
+                } else if (fdi.dLGDirectoryMode) // directory chooser
                 {
                     fdi.SelectFileName(m_FileDialogInternal, vInfos);
                 } else {
@@ -4127,10 +4173,11 @@ void IGFD::FileDialog::m_SelectableItem(int vidx, std::shared_ptr<FileInfos> vIn
                 }
             } else  // no nav system => classic behavior
             {
-                if (ImGui::IsMouseDoubleClicked(0))  // 0 -> left mouse button double click
+                if (ImGui::IsMouseDoubleClicked(0) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown)
+                    || ImGui::IsKeyPressed(ImGuiKey_Enter)) // 0 -> left mouse button double click
                 {
                     fdi.puPathClicked = fdi.SelectDirectory(vInfos);
-                } else if (fdi.dLGDirectoryMode)  // directory chooser
+                } else if (fdi.dLGDirectoryMode) // directory chooser
                 {
                     fdi.SelectFileName(m_FileDialogInternal, vInfos);
                 }
@@ -4186,30 +4233,23 @@ void IGFD::FileDialog::m_DrawFileListView(ImVec2 vSize) {
 
     ImGui::PushID(this);
 
-    static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
-                                   ImGuiTableFlags_NoHostExtendY
+    static ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY
 #ifndef USE_CUSTOM_SORTING_ICON
                                    | ImGuiTableFlags_Sortable
 #endif  // USE_CUSTOM_SORTING_ICON
         ;
     auto listViewID = ImGui::GetID("##FileDialog_fileTable");
-    if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 4, flags, vSize, 0.0f))  //-V112
+
+    ImGuiContext &g = *GImGui;
+    g.NextWindowData.HasFlags |= ImGuiNextWindowDataFlags_HasChildFlags;
+    g.NextWindowData.ChildFlags |= ImGuiChildFlags_NavFlattened;
+    if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 2, flags, vSize, 0.0f)) //-V112
     {
         ImGui::TableSetupScrollFreeze(0, 1);  // Make header always visible
         ImGui::TableSetupColumn(fdi.headerFileName.c_str(),
             ImGuiTableColumnFlags_WidthStretch |
                 (defaultSortOrderFilename ? ImGuiTableColumnFlags_PreferSortAscending : ImGuiTableColumnFlags_PreferSortDescending),
             -1, 0);
-        ImGui::TableSetupColumn(fdi.headerFileType.c_str(),
-            ImGuiTableColumnFlags_WidthFixed |
-                (defaultSortOrderType ? ImGuiTableColumnFlags_PreferSortAscending : ImGuiTableColumnFlags_PreferSortDescending) |
-                ((m_FileDialogInternal.dLGflags & ImGuiFileDialogFlags_HideColumnType) ? ImGuiTableColumnFlags_DefaultHide : 0),
-            -1, 1);
-        ImGui::TableSetupColumn(fdi.headerFileSize.c_str(),
-            ImGuiTableColumnFlags_WidthFixed |
-                (defaultSortOrderSize ? ImGuiTableColumnFlags_PreferSortAscending : ImGuiTableColumnFlags_PreferSortDescending) |
-                ((m_FileDialogInternal.dLGflags & ImGuiFileDialogFlags_HideColumnSize) ? ImGuiTableColumnFlags_DefaultHide : 0),
-            -1, 2);
         ImGui::TableSetupColumn(fdi.headerFileDate.c_str(),
             ImGuiTableColumnFlags_WidthFixed |
                 (defaultSortOrderDate ? ImGuiTableColumnFlags_PreferSortAscending : ImGuiTableColumnFlags_PreferSortDescending) |
@@ -4294,8 +4334,7 @@ void IGFD::FileDialog::m_DrawFileListView(ImVec2 vSize) {
             std::string _str;
             ImFont* _font = nullptr;
             bool _showColor = false;
-
-            m_FileListClipper.Begin((int)fdi.GetFilteredListSize(), ImGui::GetTextLineHeightWithSpacing());
+            m_FileListClipper.Begin((int) fdi.GetFilteredListSize());
             while (m_FileListClipper.Step()) {
                 for (int i = m_FileListClipper.DisplayStart; i < m_FileListClipper.DisplayEnd; i++) {
                     if (i < 0)
@@ -4314,18 +4353,6 @@ void IGFD::FileDialog::m_DrawFileListView(ImVec2 vSize) {
                     if (ImGui::TableNextColumn())  // file name
                     {
                         m_SelectableItem(i, infos, selected, _str.c_str());
-                    }
-                    if (ImGui::TableNextColumn())  // file type
-                    {
-                        ImGui::Text("%s", infos->fileExtLevels[0].c_str());
-                    }
-                    if (ImGui::TableNextColumn())  // file size
-                    {
-                        if (!infos->fileType.isDir()) {
-                            ImGui::Text("%s ", infos->formatedFileSize.c_str());
-                        } else {
-                            ImGui::TextUnformatted("");
-                        }
                     }
                     if (ImGui::TableNextColumn())  // file date + time
                     {
